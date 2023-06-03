@@ -20,8 +20,10 @@
 
 int main (string[] args) {
     ArchiveX.Application app = new ArchiveX.Application ();
+
     Posix.signal (Posix.Signal.INT, () => {
-        ArchiveX.Application.archive.close ();
+        var inner_app = GLib.Application.get_default ();
+        inner_app.shutdown ();
         Posix.exit (130);
     });
 

@@ -1,5 +1,33 @@
 namespace ArchiveX {
-    public class FileView : Object {
+    public class FileView : Gtk.ApplicationWindow {
+        string ui = """
+            <interface>
+              <object class="GtkHeaderBar" id="titlebar">
+                <property name="title-widget">
+                  <object class="GtkLabel" id="titlelabel">
+                    <property name="single-line-mode">True</property>
+                    <property name="ellipsize">end</property>
+                    <property name="width-chars">5</property>
+                    <style>
+                      <class name="title"/>
+                    </style>
+                  </object>
+                </property>
+                <child>
+                  <object class="GtkButton" id="upbutton">
+                    <property name="label">↑</property>
+                  </object>
+                </child>
+              </object>
+
+              <object class="GtkScrolledWindow" id="scrolled_window">
+                <child>
+                  <object class="AdwClamp" id="clamp">
+                  </object>
+                </child>
+              </object>
+            </interface>
+        """;
         public ArchiveX.Archive archive = new ArchiveX.Archive ();
 
         Gtk.Label titlelabel;
@@ -11,7 +39,39 @@ namespace ArchiveX {
             "modified"
         };
 
+        public FileView (Adw.Application app) {
+            this.close_request.connect (this.on_close);
+
+            var b = new Gtk.Builder.from_string (ui, ui.length);
+            var scroll = b.get_object ("scrolled_window") as Gtk.ScrolledWindow;
+            var area = b.get_object ("clamp") as Adw.Clamp;
+            var titlebar = b.get_object ("titlebar") as Gtk.HeaderBar;
+            this.titlelabel = b.get_object ("titlelabel") as Gtk.Label;
+            var upbutton = b.get_object ("upbutton") as Gtk.Button;
+            upbutton.clicked.connect (() => {
+                try {
+                    this.archive.chdir ("..");
+                    this.titlelabel.set_text (this.archive.get_current_path ());
+                }
+                catch (GLib.Error e) {
+                    stderr.printf ("Can't cd: %s", e.message);
+                }
+            });
+
+            this.titlelabel.set_text ("/");
+
+            this.set_titlebar (titlebar);
+
+            var list = this.create_column_view ();
+            this.setup_dnd (list);
+
+            area.set_child (list);
+            this.set_child (scroll);
+            this.set_application (app);
+        }
+
         async void open_archive (string filename) {
+            stdout.printf ("open archive\n");
             try {
                 this.archive.close ();
                 this.archive.open (filename);
@@ -92,24 +152,20 @@ namespace ArchiveX {
                 return Gdk.DragAction.COPY;
             });
             drop_target.drop.connect ((v, x, y) => {
+                // TODO: filter for archives
                 var f = v as GLib.File;
                 var info = f.query_info ("*", FileQueryInfoFlags.NOFOLLOW_SYMLINKS);
-                stdout.printf ("drop %s\n", f.get_path ());
                 this.open_archive.begin (f.get_path ());
                 return true;
             });
             var drag_source = new Gtk.DragSource ();
             drag_source.drag_end.connect ((source, drag) => {
-                stdout.printf ("end\n");
             });
             drag_source.drag_begin.connect ((source, drag) => {
-                var selected = this.selection.get_selection ();
-
-                for (uint i = 0; i < selected.get_size (); i++) {
-                    stdout.printf ("%u\n", selected.get_nth (i));
-                }
+                // TODO: set icon maybe?
             });
             drag_source.prepare.connect ((source, x, y) => {
+                // TODO: make it work for multiple files somehow
                 var selected = this.selection.get_selection ();
 
                 var files = new GLib.SList<GLib.File> ();
@@ -131,6 +187,12 @@ namespace ArchiveX {
             });
             list.add_controller (drag_source);
             list.add_controller (drop_target);
+        }
+
+        bool on_close () {
+            stdout.printf ("got close request\n");
+            this.archive.close ();
+            return false;
         }
     }
 }
