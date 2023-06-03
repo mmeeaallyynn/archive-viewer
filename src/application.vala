@@ -21,7 +21,7 @@
 namespace ArchiveX {
     public class Application : Adw.Application {
         public Application () {
-            Object (application_id: "local.adw.Test", flags: ApplicationFlags.FLAGS_NONE);
+            Object (application_id: "com.merlin.ArchiveX", flags: ApplicationFlags.FLAGS_NONE);
         }
 
         construct {
