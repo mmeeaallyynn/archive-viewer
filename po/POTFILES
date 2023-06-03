@@ -1,0 +1,6 @@
+data/local.adw.Test.desktop.in
+data/local.adw.Test.appdata.xml.in
+data/local.adw.Test.gschema.xml
+src/main.vala
+src/window.vala
+src/window.ui
