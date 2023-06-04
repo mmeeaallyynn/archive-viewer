@@ -123,8 +123,7 @@ namespace ArchiveX {
                     switch (title) {
                     case "File":
                         var icon = grid.get_child_at (0, 0) as Gtk.Image;
-                        var appinfo = AppInfo.get_default_for_type (entry.get_content_type (), true);
-                        icon.set_from_gicon (appinfo.get_icon ());
+                        icon.set_from_gicon (GLib.ContentType.get_icon (entry.get_content_type ()));
                         label.label = entry.get_name ();
                         break;
                     case "Size":
