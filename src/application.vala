@@ -21,7 +21,7 @@
 namespace ArchiveX {
     public class Application : Adw.Application {
         public Application () {
-            Object (application_id: "com.merlin.ArchiveX", flags: ApplicationFlags.FLAGS_NONE);
+            Object (application_id: "com.merlin.ArchiveX", flags: ApplicationFlags.HANDLES_OPEN);
         }
 
         construct {
@@ -34,6 +34,9 @@ namespace ArchiveX {
             this.add_action_entries (action_entries, this);
             this.set_accels_for_action ("app.quit", {"<primary>q"});
             this.set_accels_for_action ("app.new_window", {"<primary>n"});
+
+            this.add_main_option ("FILE", 'f', GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Filename of the archive", null);
+            this.set_option_context_parameter_string ("FILE");
         }
 
         public override void activate () {
@@ -77,6 +80,15 @@ namespace ArchiveX {
 
         private void close_active () {
             this.active_window.close ();
+        }
+
+        public override void open (File[] files, string hint) {
+            foreach (File f in files) {
+                this.activate ();
+                var win = this.active_window as FileView;
+
+                win.open_archive.begin (f.get_path ());
+            }
         }
     }
 }

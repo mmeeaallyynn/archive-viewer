@@ -19,10 +19,20 @@ namespace ArchiveX {
                   </object>
                 </child>
               </object>
-
-              <object class="GtkScrolledWindow" id="scrolled_window">
+              <object class="GtkStack" id="stack">
                 <child>
-                  <object class="AdwClamp" id="clamp">
+                  <object class="GtkScrolledWindow" id="scrolled_window">
+                    <child>
+                      <object class="AdwClamp" id="clamp">
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox" id="spinner_view">
+                    <child>
+                      <object class="GtkSpinner" id="spinner"/>
+                    </child>
                   </object>
                 </child>
               </object>
@@ -32,6 +42,11 @@ namespace ArchiveX {
 
         Gtk.Label titlelabel;
         Gtk.MultiSelection selection;
+
+        Gtk.Stack stack;
+        Gtk.ScrolledWindow file_view;
+        Gtk.Box spinner_view;
+
         static string[] column_titles = {
             "file",
             "size",
@@ -40,23 +55,27 @@ namespace ArchiveX {
         };
 
         public FileView (Adw.Application app) {
+            this.archive.load_finished.connect (() => {
+                this.titlelabel.set_text (this.archive.get_current_path ());
+                this.stack.set_visible_child (this.file_view);
+            });
+            this.archive.load_started.connect (() => {
+                this.stack.set_visible_child (this.spinner_view);
+            });
+
             this.close_request.connect (this.on_close);
+            this.set_default_size (600, 400);
 
             var b = new Gtk.Builder.from_string (ui, ui.length);
-            var scroll = b.get_object ("scrolled_window") as Gtk.ScrolledWindow;
+            this.stack = b.get_object ("stack") as Gtk.Stack;
+            this.file_view = b.get_object ("scrolled_window") as Gtk.ScrolledWindow;
+            this.spinner_view = b.get_object ("spinner_view") as Gtk.Box;
+            var spinner = b.get_object ("spinner") as Gtk.Spinner;
             var area = b.get_object ("clamp") as Adw.Clamp;
             var titlebar = b.get_object ("titlebar") as Gtk.HeaderBar;
             this.titlelabel = b.get_object ("titlelabel") as Gtk.Label;
             var upbutton = b.get_object ("upbutton") as Gtk.Button;
-            upbutton.clicked.connect (() => {
-                try {
-                    this.archive.chdir ("..");
-                    this.titlelabel.set_text (this.archive.get_current_path ());
-                }
-                catch (GLib.Error e) {
-                    stderr.printf ("Can't cd: %s", e.message);
-                }
-            });
+            upbutton.clicked.connect (this.navigate_up);
 
             this.titlelabel.set_text ("/");
 
@@ -64,49 +83,20 @@ namespace ArchiveX {
 
             var list = this.create_column_view ();
             this.setup_dnd (list);
+            spinner.set_spinning (true);
+            spinner.set_size_request (50, 50);
+            this.spinner_view.set_halign (Gtk.Align.CENTER);
 
             area.set_child (list);
-            this.set_child (scroll);
+            this.set_child (this.stack);
             this.set_application (app);
-        }
-
-        async void open_archive (string filename) {
-            stdout.printf ("open archive\n");
-            try {
-                this.archive.close ();
-                this.archive.open (filename);
-            }
-            catch (GLib.FileError e) {
-                stderr.printf ("Can't create tmpdir: %s\n", e.message);
-                this.archive.close ();
-            }
-            catch (ArchiveX.ArchiveFSError e) {
-                stderr.printf ("Can't mount archive: %s\n", e.message);
-                this.archive.close ();
-            }
-            catch (GLib.Error e) {
-                stderr.printf ("Can't launch archivefs: %s\n", e.message);
-                this.archive.close ();
-            }
         }
 
         Gtk.ColumnView create_column_view () {
             this.selection  = new Gtk.MultiSelection  (this.archive.list);
             var column_view = new Gtk.ColumnView (selection);
             column_view.set_vexpand (true);
-            column_view.activate.connect ((position) => {
-                var info = this.archive.list.get_item (position) as GLib.FileInfo;
-                if (info.get_file_type () == GLib.FileType.DIRECTORY) {
-                    try {
-                        this.archive.chdir (info.get_name ());
-                        this.titlelabel.set_text (this.archive.get_current_path ());
-                    }
-                    catch (GLib.Error e) {
-                        stderr.printf ("Can't open %s: %s\n", info.get_name (), e.message);
-                    }
-                }
-                stdout.printf ("activated %s\n", info.get_name ());
-            });
+            column_view.activate.connect (this.activate_item);
 
 
             foreach (string title in FileView.column_titles) {
@@ -193,6 +183,56 @@ namespace ArchiveX {
             stdout.printf ("got close request\n");
             this.archive.close ();
             return false;
+        }
+
+
+        public async void open_archive (string filename) {
+            stdout.printf ("open archive\n");
+            // TODO: create loading animation
+            this.titlelabel.set_text ("Loading Archive...");
+            this.stack.set_visible_child (this.spinner_view);
+            try {
+                this.archive.close ();
+                yield this.archive.open (filename);
+            }
+            catch (GLib.FileError e) {
+                error ("Can't create tmpdir: %s\n", e.message);
+                this.archive.close ();
+            }
+            catch (ArchiveX.ArchiveFSError e) {
+                error ("Can't mount archive: %s\n", e.message);
+                this.archive.close ();
+            }
+            catch (GLib.Error e) {
+                error ("Can't launch archivefs: %s\n", e.message);
+                this.archive.close ();
+            }
+        }
+
+        public async void activate_item (uint position) {
+            var info = this.archive.list.get_item (position) as GLib.FileInfo;
+
+            if (info.get_file_type () == GLib.FileType.DIRECTORY) {
+                try {
+                    yield this.archive.chdir (info.get_name ());
+                }
+                catch (GLib.Error e) {
+                    error ("Can't chdir up: %s", e.message);
+                }
+                this.titlelabel.set_text (this.archive.get_current_path ());
+            }
+
+            stdout.printf ("activated %s\n", info.get_name ());
+        }
+
+        async void navigate_up () {
+            try {
+                yield this.archive.chdir ("..");
+                this.titlelabel.set_text (this.archive.get_current_path ());
+            }
+            catch (GLib.Error e) {
+                error ("Can't cd: %s", e.message);
+            }
         }
     }
 }
