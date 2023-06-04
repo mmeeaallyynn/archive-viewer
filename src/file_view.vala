@@ -48,10 +48,10 @@ namespace ArchiveX {
         Gtk.Box spinner_view;
 
         static string[] column_titles = {
-            "file",
-            "size",
-            "type",
-            "modified"
+            "File",
+            "Size",
+            "Type",
+            "Modified"
         };
 
         public FileView (Adw.Application app) {
@@ -111,16 +111,16 @@ namespace ArchiveX {
                     var entry = list_item.get_item () as GLib.FileInfo;
 
                     switch (title) {
-                    case "file":
+                    case "File":
                         label.label = entry.get_name ();
                         break;
-                    case "size":
-                        label.label = entry.get_size ().to_string ();
+                    case "Size":
+                        label.label = GLib.format_size(entry.get_size ());
                         break;
-                    case "type":
+                    case "Type":
                         label.label = entry.get_content_type ();
                         break;
-                    case "modified":
+                    case "Modified":
                         var datetime = entry.get_modification_date_time ();
                         if (datetime != null) {
                             label.label = datetime.format ("%d %B %Y, %R");
@@ -130,6 +130,7 @@ namespace ArchiveX {
                 });
 
                 var column = new Gtk.ColumnViewColumn (title, factory);
+                column.set_resizable (true);
                 column_view.append_column (column);
             }
 
