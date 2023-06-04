@@ -8,6 +8,7 @@ namespace ArchiveX {
     // create second folder as overlay
     // create new archive from both folders on save
     public class Archive {
+        public string name;
         public string tmp_dir;
         Gee.ArrayList<string> current_path;
         bool is_mounted = false;
@@ -31,7 +32,7 @@ namespace ArchiveX {
             this.cancellable = new Cancellable ();
             this.is_mounted = true;
             var path_list = path.split ("/");
-            var name = path_list[path_list.length - 1];
+            this.name = path_list[path_list.length - 1];
             this.tmp_dir = GLib.DirUtils.make_tmp (@"archivex-$name-XXXXXX");
             this.current_path = new Gee.ArrayList<string> ();
 

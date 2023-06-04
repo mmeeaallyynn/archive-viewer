@@ -56,7 +56,7 @@ namespace ArchiveX {
 
         public FileView (Adw.Application app) {
             this.archive.load_finished.connect (() => {
-                this.titlelabel.set_text (this.archive.get_current_path ());
+                this.titlelabel.set_text (this.archive.name + this.archive.get_current_path ());
                 this.stack.set_visible_child (this.file_view);
             });
             this.archive.load_started.connect (() => {
@@ -77,7 +77,7 @@ namespace ArchiveX {
             var upbutton = b.get_object ("upbutton") as Gtk.Button;
             upbutton.clicked.connect (this.navigate_up);
 
-            this.titlelabel.set_text ("/");
+            this.titlelabel.set_text ("ArchiveX");
 
             this.set_titlebar (titlebar);
 
@@ -232,7 +232,6 @@ namespace ArchiveX {
                 catch (GLib.Error e) {
                     error ("Can't chdir up: %s", e.message);
                 }
-                this.titlelabel.set_text (this.archive.get_current_path ());
             }
             else {
                 try {
@@ -249,7 +248,6 @@ namespace ArchiveX {
         async void navigate_up () {
             try {
                 yield this.archive.chdir ("..");
-                this.titlelabel.set_text (this.archive.get_current_path ());
             }
             catch (GLib.Error e) {
                 error ("Can't cd: %s", e.message);
