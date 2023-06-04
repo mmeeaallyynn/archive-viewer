@@ -42,7 +42,6 @@ namespace ArchiveX {
         public override void activate () {
             base.activate ();
 
-            stdout.printf ("activate!\n");
             var win = new FileView (this);
             win.present ();
         }

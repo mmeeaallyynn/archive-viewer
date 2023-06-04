@@ -222,6 +222,14 @@ namespace ArchiveX {
                 }
                 this.titlelabel.set_text (this.archive.get_current_path ());
             }
+            else {
+                try {
+                    AppInfo.launch_default_for_uri ("file://" + this.archive.get_path_in_fs (info.get_name ()), null);
+                }
+                catch (Error e) {
+                    error ("Can't open %s: %s", info.get_name (), e.message);
+                }
+            }
 
             stdout.printf ("activated %s\n", info.get_name ());
         }
