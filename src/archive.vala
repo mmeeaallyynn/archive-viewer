@@ -7,12 +7,12 @@ namespace ArchiveX {
     // TODO: edit archives:
     // create second folder as overlay
     // create new archive from both folders on save
-
     public class Archive {
         public string tmp_dir;
         Gee.ArrayList<string> current_path;
         bool is_mounted = false;
         public GLib.ListStore list = new GLib.ListStore (typeof (GLib.FileInfo));
+        Gee.HashMap<string, Gee.List<GLib.FileInfo>> dir_cache = new Gee.HashMap<string, Gee.List<GLib.FileInfo>> ();
         GLib.Cancellable? cancellable = null;
         public signal void load_finished ();
         public signal void load_started ();
@@ -63,22 +63,34 @@ namespace ArchiveX {
 
             var total_path = this.current_path.fold<string> ((element, acc) => acc + "/" + element, "");
             this.list.remove_all ();
-
-            var dir = GLib.File.new_for_path (this.tmp_dir + "/" + total_path);
-            FileEnumerator enumerator = yield dir.enumerate_children_async (
-                "*",
-                FileQueryInfoFlags.NOFOLLOW_SYMLINKS);
-
-            while (true) {
-                var file_infos = yield enumerator.next_files_async (10, Priority.DEFAULT, null);
-
-                if (file_infos == null) {
-                    break;
-                }
-
-                foreach (var info in file_infos) {
+            if (this.dir_cache.has_key (total_path)) {
+                debug ("load from cache: %s", total_path);
+                var cache_entry = this.dir_cache.get (total_path);
+                foreach (var info in cache_entry) {
                     this.list.append (info);
                 }
+            }
+            else {
+                var cache_entry = new Gee.ArrayList<GLib.FileInfo> ();
+                var dir = GLib.File.new_for_path (this.tmp_dir + "/" + total_path);
+                FileEnumerator enumerator = yield dir.enumerate_children_async (
+                    "*",
+                    FileQueryInfoFlags.NOFOLLOW_SYMLINKS);
+
+                while (true) {
+                    var file_infos = yield enumerator.next_files_async (10, Priority.DEFAULT, null);
+
+                    if (file_infos == null) {
+                        break;
+                    }
+
+                    foreach (var info in file_infos) {
+                        cache_entry.add (info);
+                        this.list.append (info);
+                    }
+                }
+                debug ("create cache entry: %s", total_path);
+                this.dir_cache.set (total_path, cache_entry);
             }
             this.load_finished ();
         }
