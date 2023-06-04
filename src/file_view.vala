@@ -102,16 +102,29 @@ namespace ArchiveX {
             foreach (string title in FileView.column_titles) {
                 var factory = new Gtk.SignalListItemFactory ();
                 factory.setup.connect ((factory, list_item) => {
+                    var grid  = new Gtk.Grid ();
                     var label = new Gtk.Label ("unknown");
+                    grid.attach (label, 1, 0);
                     label.set_xalign (0);
-                    list_item.set_child (label);
+
+                    if (title == "File") {
+                        var icon = new Gtk.Image ();
+                        grid.attach (icon, 0, 0);
+                        grid.set_column_spacing (5);
+                    }
+
+                    list_item.set_child (grid);
                 });
                 factory.bind.connect((factory, list_item) => {
-                    var label = list_item.get_child () as Gtk.Label;
+                    var grid = list_item.get_child () as Gtk.Grid;
+                    var label =  grid.get_child_at (1, 0) as Gtk.Label;
                     var entry = list_item.get_item () as GLib.FileInfo;
 
                     switch (title) {
                     case "File":
+                        var icon = grid.get_child_at (0, 0) as Gtk.Image;
+                        var appinfo = AppInfo.get_default_for_type (entry.get_content_type (), true);
+                        icon.set_from_gicon (appinfo.get_icon ());
                         label.label = entry.get_name ();
                         break;
                     case "Size":
