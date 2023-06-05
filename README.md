@@ -1,3 +1,3 @@
-# adwvalatest
+# ArchiveX
 
-A description of this project.
+A simple Gtk4 read-only archive viewer with support for drag-and-drop.

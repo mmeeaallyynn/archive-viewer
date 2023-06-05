@@ -201,7 +201,6 @@ namespace ArchiveX {
 
         public async void open_archive (string filename) {
             stdout.printf ("open archive\n");
-            // TODO: create loading animation
             this.titlelabel.set_text ("Loading Archive...");
             this.stack.set_visible_child (this.spinner_view);
             try {
@@ -209,16 +208,19 @@ namespace ArchiveX {
                 yield this.archive.open (filename);
             }
             catch (GLib.FileError e) {
-                error ("Can't create tmpdir: %s\n", e.message);
                 this.archive.close ();
+                this.archive.load_finished ();
+                warning ("Can't create tmpdir: %s\n", e.message);
             }
             catch (ArchiveX.ArchiveFSError e) {
-                error ("Can't mount archive: %s\n", e.message);
                 this.archive.close ();
+                this.archive.load_finished ();
+                warning ("Can't mount archive: %s\n", e.message);
             }
             catch (GLib.Error e) {
-                error ("Can't launch archivefs: %s\n", e.message);
                 this.archive.close ();
+                this.archive.load_finished ();
+                warning ("Can't launch archivefs: %s\n", e.message);
             }
         }
 
@@ -230,7 +232,7 @@ namespace ArchiveX {
                     yield this.archive.chdir (info.get_name ());
                 }
                 catch (GLib.Error e) {
-                    error ("Can't chdir up: %s", e.message);
+                    warning ("Can't chdir up: %s", e.message);
                 }
             }
             else {
@@ -238,7 +240,7 @@ namespace ArchiveX {
                     AppInfo.launch_default_for_uri ("file://" + this.archive.get_path_in_fs (info.get_name ()), null);
                 }
                 catch (Error e) {
-                    error ("Can't open %s: %s", info.get_name (), e.message);
+                    warning ("Can't open %s: %s", info.get_name (), e.message);
                 }
             }
 
@@ -250,7 +252,7 @@ namespace ArchiveX {
                 yield this.archive.chdir ("..");
             }
             catch (GLib.Error e) {
-                error ("Can't cd: %s", e.message);
+                warning ("Can't cd: %s", e.message);
             }
         }
     }
