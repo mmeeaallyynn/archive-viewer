@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=archivex
 Exec=archivex
-Icon=com.merlin.ArchiveX
+Icon=com.mealynn.ArchiveX
 Terminal=false
 Type=Application
 Categories=GTK;

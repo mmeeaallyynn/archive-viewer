@@ -21,7 +21,7 @@
 namespace ArchiveX {
     public class Application : Gtk.Application {
         public Application () {
-            Object (application_id: "com.merlin.ArchiveX", flags: ApplicationFlags.HANDLES_OPEN);
+            Object (application_id: "com.mealynn.ArchiveX", flags: ApplicationFlags.HANDLES_OPEN);
         }
 
         construct {
