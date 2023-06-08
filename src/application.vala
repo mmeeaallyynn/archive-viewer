@@ -19,7 +19,7 @@
  */
 
 namespace ArchiveX {
-    public class Application : Adw.Application {
+    public class Application : Gtk.Application {
         public Application () {
             Object (application_id: "com.merlin.ArchiveX", flags: ApplicationFlags.HANDLES_OPEN);
         }
@@ -41,7 +41,6 @@ namespace ArchiveX {
 
         public override void activate () {
             base.activate ();
-
             var win = new FileView (this);
             win.present ();
         }

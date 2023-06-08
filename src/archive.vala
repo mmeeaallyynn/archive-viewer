@@ -14,7 +14,17 @@ namespace ArchiveX {
      * archivefs handles reading and extracting the contents.
      */
     public class Archive {
-        public string name;
+        // TODO: complete this list
+        public static string[] content_types = {
+            "application/x-compressed-tar",
+            "application/zip",
+            "application/vnd.rar",
+            "application/x-bzip-compressed-tar",
+            "application/x-7z-compressed",
+            "application/x-cd-image",
+            "application/x-tar"
+        };
+        public string name { public get; set; }
         public string tmp_dir;
         Gee.ArrayList<string> current_path;
         bool is_mounted = false;
@@ -103,6 +113,7 @@ namespace ArchiveX {
         }
 
         public void close () {
+            this.dir_cache.clear ();
             if (this.cancellable != null) {
                 this.cancellable.cancel ();
             }

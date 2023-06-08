@@ -22,10 +22,6 @@ namespace ArchiveX {
               <object class="GtkStack" id="stack">
                 <child>
                   <object class="GtkScrolledWindow" id="scrolled_window">
-                    <child>
-                      <object class="AdwClamp" id="clamp">
-                      </object>
-                    </child>
                   </object>
                 </child>
                 <child>
@@ -38,10 +34,28 @@ namespace ArchiveX {
               </object>
             </interface>
         """;
+
+        // The list cells can't have a controller added, so this removes their padding
+        // and adds it to the grid inside of the cell instead
+
+        string css = """
+            columnview > listview > row > cell {
+                padding-top: 0px;
+                padding-bottom: 0px;
+                padding-left: 0px;
+                padding-right: 0px;
+            }
+            columnview > listview > row > cell grid {
+                padding-top: 10px;
+                padding-bottom: 10px;
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+        """;
         public ArchiveX.Archive archive = new ArchiveX.Archive ();
 
         Gtk.Label titlelabel;
-        Gtk.MultiSelection selection;
+        Gtk.SelectionModel selection;
 
         Gtk.Stack stack;
         Gtk.ScrolledWindow file_view;
@@ -54,7 +68,13 @@ namespace ArchiveX {
             "Modified"
         };
 
-        public FileView (Adw.Application app) {
+        public FileView (Gtk.Application app) {
+            var css_provider = new Gtk.CssProvider ();
+            css_provider.load_from_data ((uint8[]) this.css);
+
+            // this is deprecated, but there seems to be no replacement
+            Gtk.StyleContext.add_provider_for_display (Gdk.Display.get_default (), css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
+
             this.archive.load_finished.connect (() => {
                 this.titlelabel.set_text (this.archive.name + this.archive.get_current_path ());
                 this.stack.set_visible_child (this.file_view);
@@ -71,7 +91,6 @@ namespace ArchiveX {
             this.file_view = b.get_object ("scrolled_window") as Gtk.ScrolledWindow;
             this.spinner_view = b.get_object ("spinner_view") as Gtk.Box;
             var spinner = b.get_object ("spinner") as Gtk.Spinner;
-            var area = b.get_object ("clamp") as Adw.Clamp;
             var titlebar = b.get_object ("titlebar") as Gtk.HeaderBar;
             this.titlelabel = b.get_object ("titlelabel") as Gtk.Label;
             var upbutton = b.get_object ("upbutton") as Gtk.Button;
@@ -87,7 +106,7 @@ namespace ArchiveX {
             spinner.set_size_request (50, 50);
             this.spinner_view.set_halign (Gtk.Align.CENTER);
 
-            area.set_child (list);
+            this.file_view.set_child (list);
             this.set_child (this.stack);
             this.set_application (app);
         }
@@ -95,9 +114,7 @@ namespace ArchiveX {
         Gtk.ColumnView create_column_view () {
             this.selection  = new Gtk.MultiSelection  (this.archive.list);
             var column_view = new Gtk.ColumnView (selection);
-            column_view.set_vexpand (true);
             column_view.activate.connect (this.activate_item);
-
 
             foreach (string title in FileView.column_titles) {
                 var factory = new Gtk.SignalListItemFactory ();
@@ -105,7 +122,7 @@ namespace ArchiveX {
                     var grid  = new Gtk.Grid ();
                     var label = new Gtk.Label ("unknown");
                     grid.attach (label, 1, 0);
-                    label.set_xalign (0);
+                    grid.set_valign (Gtk.Align.FILL);
 
                     if (title == "File") {
                         var icon = new Gtk.Image ();
@@ -114,7 +131,20 @@ namespace ArchiveX {
                     }
 
                     list_item.set_child (grid);
+
+                    // by default, the item is selected when the mouse button is released
+                    // this selects it on mouse pressed
+                    var click = new Gtk.GestureClick ();
+                    click.pressed.connect ((n_press, x, y) => {
+                        var control_pressed = click.get_current_event_state () & Gdk.ModifierType.CONTROL_MASK;
+                        // Don't select when control is pressed, otherwise it will be unselected again on release
+                        if (control_pressed == 0) {
+                            this.selection.select_item (list_item.position, control_pressed == 0);
+                        }
+                    });
+                    grid.add_controller (click);
                 });
+
                 factory.bind.connect((factory, list_item) => {
                     var grid = list_item.get_child () as Gtk.Grid;
                     var label =  grid.get_child_at (1, 0) as Gtk.Label;
@@ -143,6 +173,9 @@ namespace ArchiveX {
 
                 var column = new Gtk.ColumnViewColumn (title, factory);
                 column.set_resizable (true);
+                if (title == "Modified") {
+                    column.set_expand (true);
+                }
                 column_view.append_column (column);
             }
 
@@ -151,15 +184,24 @@ namespace ArchiveX {
 
         void setup_dnd (Gtk.ColumnView list) {
             var drop_target = new Gtk.DropTarget (typeof (GLib.File), Gdk.DragAction.COPY);
+
             drop_target.motion.connect ((x, y) => {
                 return Gdk.DragAction.COPY;
             });
             drop_target.drop.connect ((v, x, y) => {
-                // TODO: filter for archives
                 var f = v as GLib.File;
-                var info = f.query_info ("*", FileQueryInfoFlags.NOFOLLOW_SYMLINKS);
-                this.open_archive.begin (f.get_path ());
-                return true;
+                try {
+                    var info = f.query_info ("*", FileQueryInfoFlags.NOFOLLOW_SYMLINKS);
+                    var content_type = info.get_content_type ();
+                    if (content_type in Archive.content_types) {
+                        this.open_archive.begin (f.get_path ());
+                    }
+                    return true;
+                }
+                catch (Error e) {
+                    warning ("Can't query file info");
+                }
+                return false;
             });
             var drag_source = new Gtk.DragSource ();
             drag_source.drag_end.connect ((source, drag) => {
@@ -257,3 +299,4 @@ namespace ArchiveX {
         }
     }
 }
+
