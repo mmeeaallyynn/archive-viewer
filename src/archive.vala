@@ -24,6 +24,36 @@ namespace ArchiveX {
         NOT_UNMOUNTED
     }
 
+    class Entry : Object {
+        public GLib.FileInfo info;
+        public string path;
+
+        public Entry (FileInfo info, string path) {
+            this.info = info;
+            this.path = path;
+        }
+
+        public static bool compare (Object a, Object b) {
+            var entry_a = a as Entry;
+            var entry_b = b as Entry;
+            if (entry_a == null || entry_b == null) {
+                return false;
+            }
+
+            try {
+                // remove duplicate slashes from the path
+                var r = new GLib.Regex ("/+");
+                string clean_path_a = r.replace (entry_a.path, entry_a.path.length, 0, "/");
+                string clean_path_b = r.replace (entry_b.path, entry_b.path.length, 0, "/");
+                return clean_path_a == clean_path_b;
+            }
+            catch (GLib.RegexError e) {
+                warning ("Can't clean path string: %s", e.message);
+                return false;
+            }
+        }
+    }
+
     // TODO: edit archives:
     // create second folder as overlay
     // create new archive from both folders on save
@@ -45,15 +75,16 @@ namespace ArchiveX {
             "application/x-tar"
         };
         public string name { public get; set; }
-        public string tmp_dir;
-        Gee.ArrayList<string> current_path;
+        public GLib.ListStore list = new GLib.ListStore (typeof (Entry));
+
+        string tmp_dir;
         bool is_mounted = false;
-        public GLib.ListStore list = new GLib.ListStore (typeof (GLib.FileInfo));
-        Gee.HashMap<string, Gee.List<GLib.FileInfo>> dir_cache = new Gee.HashMap<string, Gee.List<GLib.FileInfo>> ();
+        Gee.ArrayList<string> current_path;
+        Gee.HashMap<string, Gee.List<Entry>> dir_cache = new Gee.HashMap<string, Gee.List<Entry>> ();
         GLib.Cancellable? cancellable = null;
+
         public signal void load_finished ();
         public signal void load_started ();
-
 
         public string get_current_path() {
             return this.current_path.fold<string> ((element, acc) => acc + "/" + element, "");
@@ -108,7 +139,7 @@ namespace ArchiveX {
                 }
             }
             else {
-                var cache_entry = new Gee.ArrayList<GLib.FileInfo> ();
+                var cache_entry = new Gee.ArrayList<Entry> ();
                 var dir = GLib.File.new_for_path (this.tmp_dir + "/" + total_path);
                 FileEnumerator enumerator = yield dir.enumerate_children_async (
                     "*",
@@ -122,8 +153,11 @@ namespace ArchiveX {
                     }
 
                     foreach (var info in file_infos) {
-                        cache_entry.add (info);
-                        this.list.append (info);
+                        var file_path = this.tmp_dir + "/" + total_path + "/" + info.get_name ();
+                        var entry = new Entry (info, file_path);
+
+                        cache_entry.add (entry);
+                        this.list.append (entry);
                     }
                 }
                 debug ("create cache entry: %s", total_path);
@@ -132,14 +166,38 @@ namespace ArchiveX {
             this.load_finished ();
         }
 
+        public void add_file (string path) {
+            var file = File.new_for_path (path);
+            GLib.FileInfo info;
+            try {
+                info = file.query_info ("*", GLib.FileQueryInfoFlags.NOFOLLOW_SYMLINKS);
+            }
+            catch (GLib.Error e) {
+                warning ("Can't add file: %s", e.message);
+                return;
+            }
+            var entry = new Entry (info, path);
+
+            uint position;
+            var contains = this.list.find_with_equal_func (entry, Entry.compare, out position);
+
+            if (!contains) {
+                var cache_entry = this.dir_cache.get (this.get_current_path ());
+                cache_entry.add (entry);
+                this.list.append (entry);
+            }
+        }
+
         public void close () {
-            this.dir_cache.clear ();
+            // cancel active chdir operation
             if (this.cancellable != null) {
                 this.cancellable.cancel ();
             }
             if (!this.is_mounted) {
                 return;
             }
+            this.dir_cache.clear ();
+            // try to unmount
             try {
                 var sp = new Subprocess.newv (
                     { "umount", this.tmp_dir },
@@ -154,8 +212,35 @@ namespace ArchiveX {
             }
             this.list.remove_all ();
 
-            GLib.DirUtils.remove (this.tmp_dir);
+            // try to delete the remaining folder
+            try {
+                ArchiveX.delete_recursive (this.tmp_dir);
+            }
+            catch (GLib.Error e) {
+                warning ("Can't delete tmp directory %s", e.message);
+            }
             this.is_mounted = false;
         }
+
+        public void save (string destination) {
+
+        }
+    }
+
+    void delete_recursive (string path) throws GLib.Error {
+        var dir = GLib.File.new_for_path (path);
+
+        var this_info = dir.query_info ("*", FileQueryInfoFlags.NOFOLLOW_SYMLINKS);
+        if (this_info.get_file_type () == GLib.FileType.DIRECTORY) {
+            FileEnumerator enumerator = dir.enumerate_children (
+                "*",
+                FileQueryInfoFlags.NOFOLLOW_SYMLINKS);
+
+            GLib.FileInfo file_info;
+            while ((file_info = enumerator.next_file (null)) != null) {
+                delete_recursive (path + "/" + file_info.get_name ());
+            }
+        }
+        dir.delete (null);
     }
 }

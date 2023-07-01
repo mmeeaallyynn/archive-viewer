@@ -18,10 +18,16 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+const double PI = 3.1415926;
+
 namespace ArchiveX {
     public class FileView : Gtk.ApplicationWindow {
         string ui = """
             <interface>
+              <object class="GtkButton" id="savebutton">
+                <property name="label">Save</property>
+                <property name="sensitive">False</property>
+              </object>
               <object class="GtkHeaderBar" id="titlebar">
                 <property name="title-widget">
                   <object class="GtkLabel" id="titlelabel">
@@ -51,13 +57,29 @@ namespace ArchiveX {
                     </child>
                   </object>
                 </child>
+                <child>
+                  <object class="GtkBox" id="drop_view">
+                    <property name="orientation">horizontal</property>
+                    <child>
+                      <object class="GtkDrawingArea" id="drawing_area_open">
+                        <property name="hexpand">True</property>
+                        <property name="vexpand">True</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkDrawingArea" id="drawing_area_add">
+                        <property name="hexpand">True</property>
+                        <property name="vexpand">True</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
               </object>
             </interface>
         """;
 
         // The list cells can't have a controller added, so this removes their padding
         // and adds it to the grid inside of the cell instead
-
         string css = """
             columnview > listview > row > cell {
                 padding-top: 0px;
@@ -72,7 +94,8 @@ namespace ArchiveX {
                 padding-right: 10px;
             }
         """;
-        public ArchiveX.Archive archive = new ArchiveX.Archive ();
+        ArchiveX.Archive archive = new ArchiveX.Archive ();
+        bool is_modified = false;
 
         Gtk.Label titlelabel;
         Gtk.SelectionModel selection;
@@ -80,6 +103,12 @@ namespace ArchiveX {
         Gtk.Stack stack;
         Gtk.ScrolledWindow file_view;
         Gtk.Box spinner_view;
+        Gtk.Box drop_view;
+
+        Gtk.DrawingArea drawing_area_open;
+        Gtk.DrawingArea drawing_area_add;
+        bool open_drawing_highlight = false;
+        bool add_drawing_highlight = false;
 
         static string[] column_titles = {
             "File",
@@ -96,7 +125,8 @@ namespace ArchiveX {
             Gtk.StyleContext.add_provider_for_display (Gdk.Display.get_default (), css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
 
             this.archive.load_finished.connect (() => {
-                this.titlelabel.set_text (this.archive.name + this.archive.get_current_path ());
+                var title = this.archive.name + this.archive.get_current_path ();
+                this.titlelabel.set_text ((this.is_modified ? "*" : "") + title);
                 this.stack.set_visible_child (this.file_view);
             });
             this.archive.load_started.connect (() => {
@@ -110,11 +140,24 @@ namespace ArchiveX {
             this.stack = b.get_object ("stack") as Gtk.Stack;
             this.file_view = b.get_object ("scrolled_window") as Gtk.ScrolledWindow;
             this.spinner_view = b.get_object ("spinner_view") as Gtk.Box;
+            this.drop_view = b.get_object ("drop_view") as Gtk.Box;
+
+            this.drawing_area_open = b.get_object ("drawing_area_open") as Gtk.DrawingArea;
+            this.drawing_area_open.set_draw_func ((area, ctx, width, height) => {
+                this.draw_drop_area ("Open File", this.open_drawing_highlight, area, ctx, width, height);
+            });
+            this.drawing_area_add = b.get_object ("drawing_area_add") as Gtk.DrawingArea;
+            this.drawing_area_add.set_draw_func ((area, ctx, width, height) => {
+                this.draw_drop_area ("Add File", this.add_drawing_highlight, area, ctx, width, height);
+            });
+
             var spinner = b.get_object ("spinner") as Gtk.Spinner;
             var titlebar = b.get_object ("titlebar") as Gtk.HeaderBar;
             this.titlelabel = b.get_object ("titlelabel") as Gtk.Label;
             var upbutton = b.get_object ("upbutton") as Gtk.Button;
+            var savebutton = b.get_object ("savebutton") as Gtk.Button;
             upbutton.clicked.connect (this.navigate_up);
+            titlebar.pack_end (savebutton);
 
             this.titlelabel.set_text ("ArchiveX");
 
@@ -129,6 +172,45 @@ namespace ArchiveX {
             this.file_view.set_child (list);
             this.set_child (this.stack);
             this.set_application (app);
+        }
+
+        void draw_drop_area (string text, bool highlight, Gtk.DrawingArea area, Cairo.Context ctx, int width, int height) {
+            var style = this.get_style_context ();
+            Gdk.RGBA color;
+            style.lookup_color ("theme_selected_bg_color", out color);
+            double cx = width / 2.0;
+            double cy = height / 2.0;
+
+            double r = 20.0;
+            double offset_x = 10;
+            double offset_y = 10;
+            double end_x = width - offset_x;
+            double end_y = height - offset_y;
+
+            if (!highlight) {
+                color.red /= 2;
+                color.green /= 2;
+                color.blue /= 2;
+            }
+            ctx.set_source_rgba (color.red, color.green, color.blue, color.alpha);
+            ctx.set_dash ({10, 5}, 0);
+            ctx.set_font_size (20.0);
+            Cairo.TextExtents extents;
+            ctx.text_extents (text, out extents);
+
+            double text_x = cx - extents.width / 2;
+            double text_y = cy + extents.height / 2;
+
+            ctx.move_to (text_x, text_y);
+            ctx.show_text (text);
+
+            ctx.move_to (offset_x, offset_y + r);
+            ctx.arc (offset_x + r, offset_y + r, r, PI, 3 * PI / 2);
+            ctx.arc (end_x - r, offset_y + r, r, 3 * PI / 2, 0);
+            ctx.arc (end_x - r, end_y - r, r, 0, PI / 2);
+            ctx.arc (offset_x + r, end_y - r, r, PI / 2, PI);
+            ctx.close_path ();
+            ctx.stroke ();
         }
 
         Gtk.ColumnView create_column_view () {
@@ -168,7 +250,7 @@ namespace ArchiveX {
                 factory.bind.connect((factory, list_item) => {
                     var grid = list_item.get_child () as Gtk.Grid;
                     var label =  grid.get_child_at (1, 0) as Gtk.Label;
-                    var entry = list_item.get_item () as GLib.FileInfo;
+                    var entry = (list_item.get_item () as Entry).info;
 
                     switch (title) {
                     case "File":
@@ -205,21 +287,52 @@ namespace ArchiveX {
         void setup_dnd (Gtk.ColumnView list) {
             var drop_target = new Gtk.DropTarget (typeof (GLib.File), Gdk.DragAction.COPY);
 
+            drop_target.enter.connect ((x, y) => {
+                this.stack.set_visible_child (this.drop_view);
+                return Gdk.DragAction.COPY;
+            });
+            drop_target.leave.connect (() => {
+                this.stack.set_visible_child (this.file_view);
+            });
             drop_target.motion.connect ((x, y) => {
+                var width = this.stack.get_width ();
+                // highlight the the area the cursor is hovering over
+                if (x < width / 2) {
+                    this.open_drawing_highlight = true;
+                    this.add_drawing_highlight = false;
+                }
+                else {
+                    this.open_drawing_highlight = false;
+                    this.add_drawing_highlight = true;
+                }
+                this.drawing_area_open.queue_draw ();
+                this.drawing_area_add.queue_draw ();
                 return Gdk.DragAction.COPY;
             });
             drop_target.drop.connect ((v, x, y) => {
+                var width = this.stack.get_width ();
                 var f = v as GLib.File;
-                try {
-                    var info = f.query_info ("*", FileQueryInfoFlags.NOFOLLOW_SYMLINKS);
-                    var content_type = info.get_content_type ();
-                    if (content_type in Archive.content_types) {
-                        this.open_archive.begin (f.get_path ());
+                // dropped into the "Open File" area
+                if (x < width / 2) {
+                    try {
+                        var info = f.query_info ("*", FileQueryInfoFlags.NOFOLLOW_SYMLINKS);
+                        var content_type = info.get_content_type ();
+                        if (content_type in Archive.content_types) {
+                            this.open_archive.begin (f.get_path ());
+                        }
+                        return true;
                     }
-                    return true;
+                    catch (Error e) {
+                        warning ("Can't query file info");
+                    }
+                    return false;
                 }
-                catch (Error e) {
-                    warning ("Can't query file info");
+                // dropped into the "Add File" area
+                else {
+                    this.is_modified = true;
+                    this.archive.add_file (f.get_path ());
+                    var title = this.archive.name + this.archive.get_current_path ();
+                    this.titlelabel.set_text ((this.is_modified ? "*" : "") + title);
                 }
                 return false;
             });
@@ -237,7 +350,8 @@ namespace ArchiveX {
                 Gdk.ContentProvider[] content_providers = new Gdk.ContentProvider[selected.get_size ()];
 
                 for (uint i = 0; i < selected.get_size (); i++) {
-                    var info = this.archive.list.get_item (selected.get_nth (i)) as GLib.FileInfo;
+                    var entry = this.archive.list.get_item (selected.get_nth (i)) as Entry;
+                    var info = entry.info;
                     var full_path = this.archive.get_path_in_fs (info.get_name ());
                     var f = GLib.File.new_for_path (full_path);
                     files.append (f);
@@ -251,7 +365,7 @@ namespace ArchiveX {
                 return finalc;
             });
             list.add_controller (drag_source);
-            list.add_controller (drop_target);
+            this.stack.add_controller (drop_target);
         }
 
         bool on_close () {
@@ -259,7 +373,6 @@ namespace ArchiveX {
             this.archive.close ();
             return false;
         }
-
 
         public async void open_archive (string filename) {
             stdout.printf ("open archive\n");
@@ -287,7 +400,8 @@ namespace ArchiveX {
         }
 
         public async void activate_item (uint position) {
-            var info = this.archive.list.get_item (position) as GLib.FileInfo;
+            var entry = this.archive.list.get_item (position) as Entry;
+            var info = entry.info;
 
             if (info.get_file_type () == GLib.FileType.DIRECTORY) {
                 try {
@@ -299,10 +413,10 @@ namespace ArchiveX {
             }
             else {
                 try {
-                    AppInfo.launch_default_for_uri ("file://" + this.archive.get_path_in_fs (info.get_name ()), null);
+                    AppInfo.launch_default_for_uri ("file://" + entry.path, null);
                 }
                 catch (Error e) {
-                    warning ("Can't open %s: %s", info.get_name (), e.message);
+                    warning ("Can't open %s: %s", entry.path, e.message);
                 }
             }
 
