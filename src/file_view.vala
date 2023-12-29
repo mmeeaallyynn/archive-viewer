@@ -220,7 +220,8 @@ namespace ArchiveX {
 
             foreach (string title in FileView.column_titles) {
                 var factory = new Gtk.SignalListItemFactory ();
-                factory.setup.connect ((factory, list_item) => {
+                factory.setup.connect ((factory, list_item_) => {
+                    var list_item = list_item_ as Gtk.ListItem;
                     var grid  = new Gtk.Grid ();
                     var label = new Gtk.Label ("unknown");
                     grid.attach (label, 1, 0);
@@ -247,7 +248,8 @@ namespace ArchiveX {
                     grid.add_controller (click);
                 });
 
-                factory.bind.connect((factory, list_item) => {
+                factory.bind.connect((factory, list_item_) => {
+                    var list_item = list_item_ as Gtk.ListItem;
                     var grid = list_item.get_child () as Gtk.Grid;
                     var label =  grid.get_child_at (1, 0) as Gtk.Label;
                     var entry = (list_item.get_item () as Entry).info;
