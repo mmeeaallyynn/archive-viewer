@@ -10,7 +10,6 @@ The GUI just displays this folder and manages automatic mounting and unmounting.
 ## Plans
 
 - Support for writing archives
-- Drag and drop multiple files at once (if I find a way)
 - Keep parent archive alive when oping nested archives
 - Create full UI
 - Better mounting integration without subprocesses

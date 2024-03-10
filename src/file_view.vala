@@ -20,6 +20,9 @@
 
 const double PI = 3.1415926;
 
+// The `new_typed` constructor necessary to create a file list content provider is not available in vala.
+extern Gdk.ContentProvider gdk_content_provider_new_file_list(GLib.SList<GLib.File> file_list);
+
 namespace ArchiveX {
     public class FileView : Gtk.ApplicationWindow {
         string ui = """
@@ -235,24 +238,14 @@ namespace ArchiveX {
 
                     list_item.set_child (grid);
 
-                    // by default, the item is selected when the mouse button is released
-                    // this selects it on mouse pressed
-                    var click = new Gtk.GestureClick ();
-                    click.pressed.connect ((n_press, x, y) => {
-                        var control_pressed = click.get_current_event_state () & Gdk.ModifierType.CONTROL_MASK;
-                        // Don't select when control is pressed, otherwise it will be unselected again on release
-                        if (control_pressed == 0) {
-                            this.selection.select_item (list_item.position, control_pressed == 0);
-                        }
-                    });
-                    grid.add_controller (click);
+                    // TODO: Use currently selected item when dragging
                 });
 
                 factory.bind.connect((factory, list_item_) => {
                     var list_item = list_item_ as Gtk.ListItem;
                     var grid = list_item.get_child () as Gtk.Grid;
                     var label =  grid.get_child_at (1, 0) as Gtk.Label;
-                    var entry = (list_item.get_item () as Entry).info;
+                    var entry = ((Entry) list_item.get_item ()).info;
 
                     switch (title) {
                     case "File":
@@ -287,7 +280,7 @@ namespace ArchiveX {
         }
 
         void setup_dnd (Gtk.ColumnView list) {
-            var drop_target = new Gtk.DropTarget (typeof (GLib.File), Gdk.DragAction.COPY);
+            var drop_target = new Gtk.DropTarget (typeof (Gdk.FileList), Gdk.DragAction.COPY);
 
             drop_target.enter.connect ((x, y) => {
                 this.stack.set_visible_child (this.drop_view);
@@ -313,30 +306,47 @@ namespace ArchiveX {
             });
             drop_target.drop.connect ((v, x, y) => {
                 var width = this.stack.get_width ();
-                var f = v as GLib.File;
+
+                Gdk.FileList file_list;
+
+                var drop = drop_target.get_current_drop ();
+                var formats = drop.get_formats ();
+                if (formats.contain_gtype (typeof (Gdk.FileList))) {
+                    file_list = v as Gdk.FileList;
+                }
+                else {
+                    var file = v as GLib.File;
+                    file_list = new Gdk.FileList.from_array ({file});
+                }
+
                 // dropped into the "Open File" area
                 if (x < width / 2) {
-                    try {
-                        var info = f.query_info ("*", FileQueryInfoFlags.NOFOLLOW_SYMLINKS);
-                        var content_type = info.get_content_type ();
-                        if (content_type in Archive.content_types) {
-                            this.open_archive.begin (f.get_path ());
+                    foreach (GLib.File f in file_list.get_files ()) {
+                        try {
+                            var info = f.query_info ("*", FileQueryInfoFlags.NOFOLLOW_SYMLINKS);
+                            var content_type = info.get_content_type ();
+                            if (content_type in Archive.content_types) {
+                                this.open_archive.begin (f.get_path ());
+                            }
+                            return true;
                         }
-                        return true;
-                    }
-                    catch (Error e) {
-                        warning ("Can't query file info");
+                        catch (Error e) {
+                            warning ("Can't query file info");
+                            return false;
+                        }
                     }
                     return false;
                 }
                 // dropped into the "Add File" area
                 else {
-                    this.is_modified = true;
-                    this.archive.add_file (f.get_path ());
-                    var title = this.archive.name + this.archive.get_current_path ();
-                    this.titlelabel.set_text ((this.is_modified ? "*" : "") + title);
+                    foreach (GLib.File f in file_list.get_files ()) {
+                        this.is_modified = true;
+                        this.archive.add_file (f.get_path ());
+                        var title = this.archive.name + this.archive.get_current_path ();
+                        this.titlelabel.set_text ((this.is_modified ? "*" : "") + title);
+                    }
+                    return true;
                 }
-                return false;
             });
             var drag_source = new Gtk.DragSource ();
             drag_source.drag_end.connect ((source, drag) => {
@@ -349,35 +359,29 @@ namespace ArchiveX {
                 var selected = this.selection.get_selection ();
 
                 var files = new GLib.SList<GLib.File> ();
-                Gdk.ContentProvider[] content_providers = new Gdk.ContentProvider[selected.get_size ()];
 
                 for (uint i = 0; i < selected.get_size (); i++) {
                     var entry = this.archive.list.get_item (selected.get_nth (i)) as Entry;
                     var info = entry.info;
                     var full_path = this.archive.get_path_in_fs (info.get_name ());
                     var f = GLib.File.new_for_path (full_path);
-                    files.append (f);
-                    var val = Value (typeof (GLib.File));
-                    val.set_instance (f);
-                    content_providers[i] = new Gdk.ContentProvider.for_value (val);
-                }
-                var file_list = new Gdk.FileList.from_list (files);
 
-                var finalc = new Gdk.ContentProvider.union (content_providers);
-                return finalc;
+                    files.append (f);
+                }
+
+                var provider = gdk_content_provider_new_file_list (files);
+                return provider;
             });
             list.add_controller (drag_source);
             this.stack.add_controller (drop_target);
         }
 
         bool on_close () {
-            stdout.printf ("got close request\n");
             this.archive.close ();
             return false;
         }
 
         public async void open_archive (string filename) {
-            stdout.printf ("open archive\n");
             this.titlelabel.set_text ("Loading Archive...");
             this.stack.set_visible_child (this.spinner_view);
             try {
@@ -421,8 +425,6 @@ namespace ArchiveX {
                     warning ("Can't open %s: %s", entry.path, e.message);
                 }
             }
-
-            stdout.printf ("activated %s\n", info.get_name ());
         }
 
         async void navigate_up () {

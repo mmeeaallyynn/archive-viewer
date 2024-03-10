@@ -3,6 +3,7 @@ archivex_sources = [
   'application.vala',
   'file_view.vala',
   'archive.vala',
+  'content_provider_helper.c'
 ]
 
 archivex_deps = [

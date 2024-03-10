@@ -58,7 +58,7 @@ namespace ArchiveX {
     // create second folder as overlay
     // create new archive from both folders on save
 
-    /* Represents an archive
+    /** Represents an archive
      *
      * This class only mounts an archive into a tmp folder.
      * archivefs handles reading and extracting the contents.
