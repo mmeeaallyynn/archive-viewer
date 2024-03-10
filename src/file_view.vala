@@ -27,10 +27,6 @@ namespace ArchiveX {
     public class FileView : Gtk.ApplicationWindow {
         string ui = """
             <interface>
-              <object class="GtkButton" id="savebutton">
-                <property name="label">Save</property>
-                <property name="sensitive">False</property>
-              </object>
               <object class="GtkHeaderBar" id="titlebar">
                 <property name="title-widget">
                   <object class="GtkLabel" id="titlelabel">
@@ -158,9 +154,7 @@ namespace ArchiveX {
             var titlebar = b.get_object ("titlebar") as Gtk.HeaderBar;
             this.titlelabel = b.get_object ("titlelabel") as Gtk.Label;
             var upbutton = b.get_object ("upbutton") as Gtk.Button;
-            var savebutton = b.get_object ("savebutton") as Gtk.Button;
             upbutton.clicked.connect (this.navigate_up);
-            titlebar.pack_end (savebutton);
 
             this.titlelabel.set_text ("ArchiveX");
 
