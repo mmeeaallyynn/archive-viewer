@@ -232,7 +232,20 @@ namespace ArchiveX {
 
                     list_item.set_child (grid);
 
-                    // TODO: Use currently selected item when dragging
+                    // by default, the item is selected when the mouse button is released
+                    // this selects it on mouse pressed
+                    var click = new Gtk.GestureClick ();
+                    click.pressed.connect ((n_press, x, y) => {
+                        if (this.selection.is_selected (list_item.position)) {
+                            return;
+                        }
+                        var control_pressed = click.get_current_event_state () & Gdk.ModifierType.CONTROL_MASK;
+                        // Don't select when control is pressed, otherwise it will be unselected again on release
+                        if (control_pressed == 0) {
+                            this.selection.select_item (list_item.position, control_pressed == 0);
+                        }
+                    });
+                    grid.add_controller (click);
                 });
 
                 factory.bind.connect((factory, list_item_) => {
